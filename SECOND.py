@@ -1,56 +1,33 @@
 import pandas as pd
 import numpy as np
-import re
-from datetime import datetime
 
-# --- Load & parse -------------------------------------------------------------
+# ========== Load & parse ==========
 # CSV columns: date,time,char_count,is_RT
-df = pd.read_csv("oldtools/tweettimes.csv")
+# Example:
+# Apr 18 2024,6:41:57 PM EDT,23,0
+df = pd.read_csv("tweettimes.csv", names=["date","time","char_count","is_RT"], header=None)
 
+# Strip trailing TZ (EST/EDT) from time for reliable parsing
 df["time_clean"] = df["time"].astype(str).str.replace(r"\s+[A-Z]{2,4}$", "", regex=True)
 
-# Join -> "May 10 04:23:00 AM"
-joined = df["date"].astype(str).str.strip() + " " + df["time_clean"].str.strip()
+# Join and parse -> timezone-naive
+ts_str = df["date"].astype(str).str.strip() + " " + df["time_clean"].astype(str).str.strip()
+df["ts"] = pd.to_datetime(ts_str, format="%b %d %Y %I:%M:%S %p", errors="coerce")
+if df["ts"].isna().any():
+    bad = df.loc[df["ts"].isna(), ["date","time"]].head()
+    raise ValueError(f"Unparsed timestamps, e.g.\n{bad}")
 
-# Parse with multiple formats (NO comma after %d)
-FMT_CANDS = ["%b %d %I:%M:%S %p", "%b %d %I:%M %p"]
+# Localize to America/New_York (handles EST/EDT correctly)
+df["ts"] = df["ts"].dt.tz_localize("America/New_York", nonexistent="shift_forward", ambiguous="infer")
 
-def try_parse(s):
-    for fmt in FMT_CANDS:
-        try:
-            return datetime.strptime(s, fmt)
-        except ValueError:
-            pass
-    return pd.NaT
-
-ts_naive = pd.to_datetime([try_parse(s) for s in joined], errors="coerce")
-if ts_naive.isna().any():
-    print("Unparsed rows (first 5):")
-    print(df.loc[ts_naive.isna(), ["date","time"]].head().to_string(index=False))
-
-# infer year from file order (start at 2000, bump on wrap-around)
-year = 2024
-assigned = []
-prev_mdts = None  # month/day/time (with dummy year) to detect wrap
-for dt in ts_naive:
-    cur_key = (dt.month, dt.day, dt.hour, dt.minute, dt.second)
-    if prev_mdts is not None and cur_key < prev_mdts:
-        year += 1
-    assigned.append(dt.replace(year=year))
-    prev_mdts = cur_key
-
-df["ts"] = pd.to_datetime(assigned)
-# localize to Eastern (handles DST)
-df["ts"] = df["ts"].dt.tz_localize("America/New_York", nonexistent="shift_forward", ambiguous="NaT")
-df = df.dropna(subset=["ts"]).reset_index(drop=True)
-
-# basic columns
-df["is_RT"] = df["is_RT"].astype(int)
+# Basic fields
 df["char_count"] = df["char_count"].astype(int)
+df["is_RT"] = df["is_RT"].astype(int)
+df = df.sort_values("ts").reset_index(drop=True)
 df["hour"] = df["ts"].dt.hour
 df["date_local"] = df["ts"].dt.date
 
-# ---------------- helpers ----------------
+# ========== Helpers ==========
 def entropy_from_hist(counts):
     tot = counts.sum()
     if tot == 0: return 0.0
@@ -69,7 +46,8 @@ def day_bin(h):
     return "evening"
 
 df["day_bin"] = df["hour"].apply(day_bin)
-df = df.sort_values("ts")
+
+# Intertweet gap (minutes) within each day
 df["gap_min"] = df.groupby("date_local")["ts"].diff().dt.total_seconds() / 60.0
 
 BURST_GAP_MIN = 10  # minutes
@@ -80,7 +58,7 @@ def per_day(g):
     orig  = total - rts
     tweet_ratio = orig / max(orig + rts, 1)
 
-    avg_tph = total / 24.0                       # per 24h
+    avg_tph = total / 24.0
     active_hours = int(g["hour"].nunique())
 
     gaps = g["gap_min"].dropna().to_numpy()
@@ -89,7 +67,7 @@ def per_day(g):
     min_gap  = float(np.min(gaps)) if gaps.size else np.nan
     max_gap  = float(np.max(gaps)) if gaps.size else np.nan
 
-    # bursts: new burst when gap > threshold (first tweet starts a burst)
+    # bursts: new burst when previous gap > threshold (first tweet starts a burst)
     if total > 0:
         over = (g["gap_min"].fillna(np.inf).to_numpy() > BURST_GAP_MIN).astype(int)
         burst_id = np.cumsum(np.insert(over, 0, 1))[:-1]
@@ -100,7 +78,7 @@ def per_day(g):
         burst_count = 0
         max_burst_len = 0
 
-    # burstiness B = (σ−μ)/(σ+μ) on intertweet gaps
+    # burstiness B = (σ−μ)/(σ+μ) on gaps
     if gaps.size >= 2 and (np.mean(gaps) + np.std(gaps)) > 0:
         burstiness = float((np.std(gaps) - np.mean(gaps)) / (np.std(gaps) + np.mean(gaps)))
     else:
@@ -147,9 +125,10 @@ def per_day(g):
         "time_of_last_tweet_cos":  l_cos,
     })
 
+# ========== Aggregate ==========
 daily = df.groupby("date_local", as_index=False).apply(per_day).reset_index(drop=True)
 
-# 7d rolling stats (use the inferred chronological order)
+# 7d rolling stats (chronological)
 daily = daily.sort_values("date_local")
 daily["7d_avg_tweets"] = daily["tweets_total"].rolling(window=7, min_periods=1).mean()
 daily["7d_var_tweets"] = daily["tweets_total"].rolling(window=7, min_periods=2).var(ddof=0)
