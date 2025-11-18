@@ -5,7 +5,7 @@ import numpy as np
 # CSV columns: date,time,char_count,is_RT
 # Example:
 # Apr 18 2024,6:41:57 PM EDT,23,0
-df = pd.read_csv("tweettimes.csv", names=["date","time","char_count","is_RT"], header=None)
+df = pd.read_csv("tweettimes.csv", names=["date","time","char_count","is_RT"], header=0)
 
 # Strip trailing TZ (EST/EDT) from time for reliable parsing
 df["time_clean"] = df["time"].astype(str).str.replace(r"\s+[A-Z]{2,4}$", "", regex=True)
