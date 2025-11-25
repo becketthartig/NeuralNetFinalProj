@@ -30,6 +30,8 @@ test_df = dfy[int(n*0.9):]
 
 num_features = df.shape[1]
 
+
+
 #Window Generation
 class WindowGenerator():
   def __init__(self, input_width, label_width, shift,
@@ -68,6 +70,34 @@ class WindowGenerator():
         f'Input indices: {self.input_indices}',
         f'Label indices: {self.label_indices}',
         f'Label column name(s): {self.label_columns}'])
+  
+@property
+def train(self):
+  return self.make_dataset(self.train_df)
+
+@property
+def val(self):
+  return self.make_dataset(self.val_df)
+
+@property
+def test(self):
+  return self.make_dataset(self.test_df)
+
+@property
+def example(self):
+  """Get and cache an example batch of `inputs, labels` for plotting."""
+  result = getattr(self, '_example', None)
+  if result is None:
+    # No example batch was found, so get one from the `.train` dataset
+    result = next(iter(self.train))
+    # And cache it for next time
+    self._example = result
+  return result
+
+WindowGenerator.train = train
+WindowGenerator.val = val
+WindowGenerator.test = test
+WindowGenerator.example = example
 
 def split_window(self, features):
   inputs = features[:, self.input_slice, :]
@@ -84,6 +114,22 @@ def split_window(self, features):
 
   return inputs, labels
 
+def make_dataset(self, data):
+  data = np.array(data, dtype=np.float32)
+  ds = tf.keras.utils.timeseries_dataset_from_array(
+      data=data,
+      targets=None,
+      sequence_length=self.total_window_size,
+      sequence_stride=1,
+      shuffle=True,
+      batch_size=32,)
+
+  ds = ds.map(self.split_window)
+
+  return ds
+
+WindowGenerator.make_dataset = make_dataset
+
 
 #Applying window generation
 window1 = WindowGenerator(input_width=6, label_width=1, 
@@ -92,7 +138,7 @@ window1 = WindowGenerator(input_width=6, label_width=1,
 WindowGenerator.split_window = split_window
 
 # Stack three slices, the length of the total window.
-example_window = tf.stack([np.asarray(train_df[:window1.total_window_size]).astype('float32'),
+example_window = tf.stack([np.asarray(train_df[:window1.total_window_size]),
                            np.array(train_df[100:100+window1.total_window_size]),
                            np.array(train_df[200:200+window1.total_window_size])])
 
@@ -135,7 +181,8 @@ def plot(self, model=None, plot_col='tweets_total', max_subplots=3):
     if n == 0:
       plt.legend()
 
-  plt.xlabel('Time [h]')
+  plt.xlabel('Time')
+  plt.show()
 
 WindowGenerator.plot = plot
 window1.plot()
