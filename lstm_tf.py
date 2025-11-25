@@ -187,4 +187,5 @@ def plot(self, model=None, plot_col='tweets_total', max_subplots=3):
 WindowGenerator.plot = plot
 window1.plot()
 
+# https://www.tensorflow.org/tutorials/structured_data/time_series#data_windowing
 
