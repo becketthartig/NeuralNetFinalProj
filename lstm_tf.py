@@ -70,72 +70,66 @@ class WindowGenerator():
         f'Input indices: {self.input_indices}',
         f'Label indices: {self.label_indices}',
         f'Label column name(s): {self.label_columns}'])
+    
+
+  def split_window(self, features):
+    inputs = features[:, self.input_slice, :]
+    labels = features[:, self.labels_slice, :]
+    if self.label_columns is not None:
+      labels = tf.stack(
+          [labels[:, :, self.column_indices[name]] for name in self.label_columns],
+          axis=-1)
+
+    # Slicing doesn't preserve static shape information, so set the shapes
+    # manually. This way the `tf.data.Datasets` are easier to inspect.
+    inputs.set_shape([None, self.input_width, None])
+    labels.set_shape([None, self.label_width, None])
+
+    return inputs, labels
+
+  def make_dataset(self, data):
+    data = np.array(data, dtype=np.float32)
+    ds = tf.keras.utils.timeseries_dataset_from_array(
+        data=data,
+        targets=None,
+        sequence_length=self.total_window_size,
+        sequence_stride=1,
+        shuffle=True,
+        batch_size=32,)
+
+    ds = ds.map(self.split_window)
+
+    return ds
   
-@property
-def train(self):
-  return self.make_dataset(self.train_df)
 
-@property
-def val(self):
-  return self.make_dataset(self.val_df)
+  @property
+  def train(self):
+    return self.make_dataset(self.train_df)
 
-@property
-def test(self):
-  return self.make_dataset(self.test_df)
+  @property
+  def val(self):
+    return self.make_dataset(self.val_df)
 
-@property
-def example(self):
-  """Get and cache an example batch of `inputs, labels` for plotting."""
-  result = getattr(self, '_example', None)
-  if result is None:
-    # No example batch was found, so get one from the `.train` dataset
-    result = next(iter(self.train))
-    # And cache it for next time
-    self._example = result
-  return result
+  @property
+  def test(self):
+    return self.make_dataset(self.test_df)
 
-WindowGenerator.train = train
-WindowGenerator.val = val
-WindowGenerator.test = test
-WindowGenerator.example = example
-
-def split_window(self, features):
-  inputs = features[:, self.input_slice, :]
-  labels = features[:, self.labels_slice, :]
-  if self.label_columns is not None:
-    labels = tf.stack(
-        [labels[:, :, self.column_indices[name]] for name in self.label_columns],
-        axis=-1)
-
-  # Slicing doesn't preserve static shape information, so set the shapes
-  # manually. This way the `tf.data.Datasets` are easier to inspect.
-  inputs.set_shape([None, self.input_width, None])
-  labels.set_shape([None, self.label_width, None])
-
-  return inputs, labels
-
-def make_dataset(self, data):
-  data = np.array(data, dtype=np.float32)
-  ds = tf.keras.utils.timeseries_dataset_from_array(
-      data=data,
-      targets=None,
-      sequence_length=self.total_window_size,
-      sequence_stride=1,
-      shuffle=True,
-      batch_size=32,)
-
-  ds = ds.map(self.split_window)
-
-  return ds
-
-WindowGenerator.make_dataset = make_dataset
+  @property
+  def example(self):
+    """Get and cache an example batch of `inputs, labels` for plotting."""
+    result = getattr(self, '_example', None)
+    if result is None:
+      # No example batch was found, so get one from the `.train` dataset
+      result = next(iter(self.train))
+      # And cache it for next time
+      self._example = result
+    return result
 
 
 #Applying window generation
 window1 = WindowGenerator(input_width=6, label_width=1, 
                           shift=1, label_columns=["tweets_total"])
 
-WindowGenerator.split_window = split_window
 
 # Stack three slices, the length of the total window.
 example_window = tf.stack([np.asarray(train_df[:window1.total_window_size]),
@@ -144,13 +138,13 @@ example_window = tf.stack([np.asarray(train_df[:window1.total_window_size]),
 
 example_inputs, example_labels = window1.split_window(example_window)
 
-print('All shapes are: (batch, time, features)')
-print(f'Window shape: {example_window.shape}')
-print(f'Inputs shape: {example_inputs.shape}')
-print(f'Labels shape: {example_labels.shape}')
+# print('All shapes are: (batch, time, features)')
+# print(f'Window shape: {example_window.shape}')
+# print(f'Inputs shape: {example_inputs.shape}')
+# print(f'Labels shape: {example_labels.shape}')
 
 #Plot windows
-window1.example = example_inputs, example_labels
+window1._example = (example_inputs, example_labels)
 def plot(self, model=None, plot_col='tweets_total', max_subplots=3):
   inputs, labels = self.example
   plt.figure(figsize=(12, 8))
@@ -186,6 +180,18 @@ def plot(self, model=None, plot_col='tweets_total', max_subplots=3):
 
 WindowGenerator.plot = plot
 window1.plot()
+
+# Example structure, data types, and shape of dataset elements
+#print(window1.train.element_spec)
+
+# # iterating over Dataset
+# for example_inputs, example_labels in window1.train.take(1):
+#   print(f'Inputs shape (batch, time, features): {example_inputs.shape}')
+#   print(f'Labels shape (batch, time, features): {example_labels.shape}')
+
+
+
+
 
 # https://www.tensorflow.org/tutorials/structured_data/time_series#data_windowing
 
