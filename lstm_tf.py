@@ -179,7 +179,7 @@ def plot(self, model=None, plot_col='tweets_total', max_subplots=3):
   plt.show()
 
 WindowGenerator.plot = plot
-window1.plot()
+#window1.plot()
 
 # Example structure, data types, and shape of dataset elements
 #print(window1.train.element_spec)
@@ -189,7 +189,37 @@ window1.plot()
 #   print(f'Inputs shape (batch, time, features): {example_inputs.shape}')
 #   print(f'Labels shape (batch, time, features): {example_labels.shape}')
 
+# Single Step Model
+single_step_window = WindowGenerator(
+    input_width=1, label_width=1, shift=1,
+    label_columns=['tweets_total'])
+print(single_step_window)
 
+for example_inputs, example_labels in single_step_window.train.take(1):
+  print(f'Inputs shape (batch, time, features): {example_inputs.shape}')
+  print(f'Labels shape (batch, time, features): {example_labels.shape}')
+
+# Baseline model for comparisons: Only predicts previous value
+class Baseline(tf.keras.Model):
+  def __init__(self, label_index=None):
+    super().__init__()
+    self.label_index = label_index
+
+  def call(self, inputs):
+    if self.label_index is None:
+      return inputs
+    result = inputs[:, :, self.label_index]
+    return result[:, :, tf.newaxis]
+# Call model
+baseline = Baseline(label_index=column_indices['tweets_total'])
+
+baseline.compile(loss=tf.keras.losses.MeanSquaredError(),
+                 metrics=[tf.keras.metrics.MeanAbsoluteError()])
+
+val_performance = {}
+performance = {}
+val_performance['Baseline'] = baseline.evaluate(single_step_window.val, return_dict=True)
+performance['Baseline'] = baseline.evaluate(single_step_window.test, verbose=0, return_dict=True)
 
 
 
