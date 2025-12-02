@@ -14,11 +14,19 @@ mpl.rcParams['figure.figsize'] = (8, 6)
 mpl.rcParams['axes.grid'] = False
 
 
-#Start of code with data loaded
+# #Start of code with data loaded
+
 df = pd.read_csv("daily_features_normalized.csv")
 df.drop('date_local', axis=1, inplace=True)
 dfy = pd.read_csv("daily_features.csv")
 dfy.drop('date_local', axis=1, inplace=True)
+
+# df = pd.read_csv("tweets_with_partial_features.csv")
+# dfy = pd.read_csv("tweets_with_partial_features.csv")
+
+# df = df.drop(columns=['date', 'time'])
+# dfy = dfy.drop(columns=['date', 'time'])
+
 
 #Data splitting
 column_indices = {name: i for i, name in enumerate(df.columns)}
@@ -30,6 +38,11 @@ test_df = dfy[int(n*0.9):]
 
 num_features = df.shape[1]
 
+
+#Clearing NaN Values
+train_df = train_df.dropna()
+val_df = val_df.dropna()
+test_df = test_df.dropna()
 
 
 #Window Generation
@@ -70,7 +83,7 @@ class WindowGenerator():
         f'Input indices: {self.input_indices}',
         f'Label indices: {self.label_indices}',
         f'Label column name(s): {self.label_columns}'])
-    
+
 
   def split_window(self, features):
     inputs = features[:, self.input_slice, :]
@@ -100,7 +113,7 @@ class WindowGenerator():
     ds = ds.map(self.split_window)
 
     return ds
-  
+
 
   @property
   def train(self):
@@ -127,8 +140,8 @@ class WindowGenerator():
 
 
 #Applying window generation
-window1 = WindowGenerator(input_width=6, label_width=1, 
-                          shift=1, label_columns=["tweets_total"])
+window1 = WindowGenerator(input_width=6, label_width=1,
+                          shift=1, label_columns=["7d_avg_tweets"])
 
 
 # Stack three slices, the length of the total window.
@@ -189,15 +202,39 @@ WindowGenerator.plot = plot
 #   print(f'Inputs shape (batch, time, features): {example_inputs.shape}')
 #   print(f'Labels shape (batch, time, features): {example_labels.shape}')
 
+
 # Single Step Model
 single_step_window = WindowGenerator(
     input_width=1, label_width=1, shift=1,
-    label_columns=['tweets_total'])
-print(single_step_window)
+    label_columns=['7d_avg_tweets'])
+# print(single_step_window)
 
-for example_inputs, example_labels in single_step_window.train.take(1):
-  print(f'Inputs shape (batch, time, features): {example_inputs.shape}')
-  print(f'Labels shape (batch, time, features): {example_labels.shape}')
+# Single step with six
+six_step_window = WindowGenerator(input_width=13,
+    label_width=13,
+    shift=1,
+    label_columns=['tweets_total'])
+# print(six_step_window)
+
+# # iterating over Dataset
+
+# for example_inputs, example_labels in single_step_window.train.take(1):
+#   print(f'Inputs shape (batch, time, features): {example_inputs.shape}')
+#   print(f'Labels shape (batch, time, features): {example_labels.shape}')
+
+# Window with wider dimentions
+wide_window = WindowGenerator(
+    input_width=24, label_width=24, shift=1,
+    label_columns=['7d_avg_tweets'])
+
+# print(wide_window)
+# print('Input shape:', wide_window.example[0].shape)
+# print('Output shape:', baseline(wide_window.example[0]).shape)
+#wide_window.plot(baseline)
+
+
+
+# https://www.tensorflow.org/tutorials/structured_data/time_series#data_windowing
 
 # Baseline model for comparisons: Only predicts previous value
 class Baseline(tf.keras.Model):
@@ -221,7 +258,148 @@ performance = {}
 val_performance['Baseline'] = baseline.evaluate(single_step_window.val, return_dict=True)
 performance['Baseline'] = baseline.evaluate(single_step_window.test, verbose=0, return_dict=True)
 
+# Add a random classifier based on the mean, std, max, and min from all of Elon's tweets all-time
+
+# Linear Model
+linear = tf.keras.Sequential([
+    tf.keras.layers.Dense(units=1)
+])
+MAX_EPOCHS = 20
+
+def compile_and_fit(model, window, patience=2):
+  early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+                                                    patience=patience,
+                                                    mode='min')
+
+  model.compile(loss=tf.keras.losses.MeanSquaredError(),
+                optimizer=tf.keras.optimizers.Adam(),
+                metrics=[tf.keras.metrics.MeanAbsoluteError()])
+
+  history = model.fit(window.train, epochs=MAX_EPOCHS,
+                      validation_data=window.val,
+                      callbacks=[early_stopping])
+  return history
+history = compile_and_fit(linear, single_step_window)
+
+val_performance['Linear'] = linear.evaluate(single_step_window.val, return_dict=True)
+performance['Linear'] = linear.evaluate(single_step_window.test, verbose=0, return_dict=True)
+
+wide_window.plot(linear)
+
+#Deeper dense model
+dense = tf.keras.Sequential([
+    tf.keras.layers.Dense(units=64, activation='relu'),
+    tf.keras.layers.Dense(units=64, activation='relu'),
+    tf.keras.layers.Dense(units=1)
+])
+
+history = compile_and_fit(dense, single_step_window)
+
+val_performance['Dense'] = dense.evaluate(single_step_window.val, return_dict=True)
+performance['Dense'] = dense.evaluate(single_step_window.test, verbose=0, return_dict=True)
+
+# Multi-step dense model
+CONV_WIDTH = 3
+conv_window = WindowGenerator(
+    input_width=CONV_WIDTH,
+    label_width=1,
+    shift=1,
+    label_columns=['tweets_total'])
+
+#conv_window
+#conv_window.plot()
+#plt.suptitle("Given 3 hours of inputs, predict 1 hour into the future.")
+multi_step_dense = tf.keras.Sequential([
+    # Shape: (time, features) => (time*features)
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(units=32, activation='relu'),
+    tf.keras.layers.Dense(units=32, activation='relu'),
+    tf.keras.layers.Dense(units=1),
+    # Add back the time dimension.
+    # Shape: (outputs) => (1, outputs)
+    tf.keras.layers.Reshape([1, -1]),
+])
+print('Input shape:', conv_window.example[0].shape)
+print('Output shape:', multi_step_dense(conv_window.example[0]).shape)
+
+history = compile_and_fit(multi_step_dense, conv_window)
+
+IPython.display.clear_output()
+val_performance['Multi step dense'] = multi_step_dense.evaluate(conv_window.val, return_dict=True)
+performance['Multi step dense'] = multi_step_dense.evaluate(conv_window.test, verbose=0, return_dict=True)
+
+conv_window.plot(multi_step_dense)
+
+# Convolutional model
+conv_model = tf.keras.Sequential([
+    tf.keras.layers.Conv1D(filters=32,
+                           kernel_size=(CONV_WIDTH,),
+                           activation='relu'),
+    tf.keras.layers.Dense(units=32, activation='relu'),
+    tf.keras.layers.Dense(units=1),
+])
+print("Conv model on `conv_window`")
+print('Input shape:', conv_window.example[0].shape)
+print('Output shape:', conv_model(conv_window.example[0]).shape)
+
+history = compile_and_fit(conv_model, conv_window)
+
+IPython.display.clear_output()
+val_performance['Conv'] = conv_model.evaluate(conv_window.val, return_dict=True)
+performance['Conv'] = conv_model.evaluate(conv_window.test, verbose=0, return_dict=True)
+
+# Wider window
+LABEL_WIDTH = 24
+INPUT_WIDTH = LABEL_WIDTH + (CONV_WIDTH - 1)
+wide_conv_window = WindowGenerator(
+    input_width=INPUT_WIDTH,
+    label_width=LABEL_WIDTH,
+    shift=1,
+    label_columns=['tweets_total'])
+#wide_conv_window
+
+wide_conv_window.plot(conv_model)
 
 
-# https://www.tensorflow.org/tutorials/structured_data/time_series#data_windowing
+# RNN (LSTM) model
+lstm_model = tf.keras.models.Sequential([
+    # Shape [batch, time, features] => [batch, time, lstm_units]
+    tf.keras.layers.LSTM(32, return_sequences=True),
+    # Shape => [batch, time, features]
+    tf.keras.layers.Dense(units=1)
+])
+
+print('Input shape:', six_step_window.example[0].shape)
+print('Output shape:', lstm_model(six_step_window.example[0]).shape)
+
+history = compile_and_fit(lstm_model, six_step_window)
+
+IPython.display.clear_output()
+val_performance['LSTM'] = lstm_model.evaluate(six_step_window.val, return_dict=True)
+performance['LSTM'] = lstm_model.evaluate(six_step_window.test, verbose=0, return_dict=True)
+
+six_step_window.plot(lstm_model)
+
+# Include training and val loss graphs -------------
+# mae is making the lstm 'too smooth', where/why is the model too smooth/has large error in a predictable way
+
+cm = lstm_model.metrics[1]
+cm.metrics
+
+print(val_performance)
+
+
+x = np.arange(len(performance))
+width = 0.3
+metric_name = 'mean_absolute_error'
+val_mae = [v[metric_name] for v in val_performance.values()]
+test_mae = [v[metric_name] for v in performance.values()]
+
+plt.ylabel('mean_absolute_error tweets_total, normalized]')
+plt.bar(x - 0.17, val_mae, width, label='Validation')
+plt.bar(x + 0.17, test_mae, width, label='Test')
+plt.xticks(ticks=x, labels=performance.keys(),
+           rotation=45)
+_ = plt.legend()
+
 
