@@ -36,8 +36,12 @@ X = X.fillna(X.median())
 # Optional: clip extreme outliers to reduce blow-ups
 # X = X.clip(X.quantile(0.001), X.quantile(0.999), axis=1)
 
-# --- Split (chronological split is better for time series; here: random for simplicity)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+split = int(len(X) * 0.8)
+X_train, X_test = X.iloc[:split], X.iloc[split:]
+y_train, y_test = y.iloc[:split], y.iloc[split:]
+
+# X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # --- Scale features (fit on train only)
 # scaler = StandardScaler()
