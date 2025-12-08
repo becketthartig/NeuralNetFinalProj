@@ -378,6 +378,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 
 
 lstm_model = tf.keras.models.Sequential([
+    # Shape [batch, time, features] => [batch, time, lstm_units]
     tf.keras.layers.LSTM(32, return_sequences=True,
     kernel_regularizer=tf.keras.regularizers.l2(1e-5),
     recurrent_regularizer=tf.keras.regularizers.l2(1e-5)),
@@ -402,6 +403,9 @@ IPython.display.clear_output()
 val_performance['LSTM'] = lstm_model.evaluate(six_step_window.val, return_dict=True)
 performance['LSTM'] = lstm_model.evaluate(six_step_window.test, verbose=0, return_dict=True)
 
+print("\nLSTM Validation MAE:", val_performance['LSTM']['mean_absolute_error'])
+print("LSTM Test MAE:", performance['LSTM']['mean_absolute_error'])
+
 six_step_window.plot(lstm_model)
 
 # Include training and val loss graphs -------------
@@ -420,6 +424,7 @@ def plot_loss(history, model_name):
 
 plot_loss(history, 'LSTM Model')
 
+
 cm = lstm_model.metrics[1]
 cm.metrics
 
@@ -437,3 +442,8 @@ plt.bar(x + 0.17, test_mae, width, label='Test')
 plt.xticks(ticks=x, labels=performance.keys(),
            rotation=45)
 _ = plt.legend()
+
+plt.figure(figsize=(12,8))
+sns.heatmap(df.corr(), annot=False, cmap='coolwarm')
+plt.title("Correlation Heatmap of Normalized Features")
+plt.show()
