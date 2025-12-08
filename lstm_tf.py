@@ -236,6 +236,7 @@ wide_window = WindowGenerator(
 
 # https://www.tensorflow.org/tutorials/structured_data/time_series#data_windowing
 
+
 # Baseline model for comparisons: Only predicts previous value
 class Baseline(tf.keras.Model):
   def __init__(self, label_index=None):
@@ -259,6 +260,7 @@ val_performance['Baseline'] = baseline.evaluate(single_step_window.val, return_d
 performance['Baseline'] = baseline.evaluate(single_step_window.test, verbose=0, return_dict=True)
 
 # Add a random classifier based on the mean, std, max, and min from all of Elon's tweets all-time
+
 
 # Linear Model
 linear = tf.keras.Sequential([
@@ -284,12 +286,19 @@ history = compile_and_fit(linear, single_step_window)
 val_performance['Linear'] = linear.evaluate(single_step_window.val, return_dict=True)
 performance['Linear'] = linear.evaluate(single_step_window.test, verbose=0, return_dict=True)
 
+
 wide_window.plot(linear)
+
+plt.bar(x = range(len(train_df.columns)),
+        height=linear.layers[0].kernel[:,0].numpy())
+axis = plt.gca()
+axis.set_xticks(range(len(train_df.columns)))
+_ = axis.set_xticklabels(train_df.columns, rotation=90)
 
 #Deeper dense model
 dense = tf.keras.Sequential([
-    tf.keras.layers.Dense(units=64, activation='relu'),
-    tf.keras.layers.Dense(units=64, activation='relu'),
+    tf.keras.layers.Dense(units=64, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001)),
+    tf.keras.layers.Dense(units=64, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001)),
     tf.keras.layers.Dense(units=1)
 ])
 
@@ -330,6 +339,7 @@ performance['Multi step dense'] = multi_step_dense.evaluate(conv_window.test, ve
 
 conv_window.plot(multi_step_dense)
 
+
 # Convolutional model
 conv_model = tf.keras.Sequential([
     tf.keras.layers.Conv1D(filters=32,
@@ -361,16 +371,30 @@ wide_conv_window = WindowGenerator(
 wide_conv_window.plot(conv_model)
 
 
-# RNN (LSTM) model
+
+
+# LSTM model
+from tensorflow.keras.callbacks import EarlyStopping
+
+
 lstm_model = tf.keras.models.Sequential([
-    # Shape [batch, time, features] => [batch, time, lstm_units]
-    tf.keras.layers.LSTM(32, return_sequences=True),
-    # Shape => [batch, time, features]
+    tf.keras.layers.LSTM(32, return_sequences=True,
+    kernel_regularizer=tf.keras.regularizers.l2(1e-5),
+    recurrent_regularizer=tf.keras.regularizers.l2(1e-5)),
+
+    tf.keras.layers.LSTM(64, return_sequences=True,
+    kernel_regularizer=tf.keras.regularizers.l2(1e-5),
+    recurrent_regularizer=tf.keras.regularizers.l2(1e-5)),
+
     tf.keras.layers.Dense(units=1)
 ])
 
-print('Input shape:', six_step_window.example[0].shape)
-print('Output shape:', lstm_model(six_step_window.example[0]).shape)
+# print('Input shape:', six_step_window.example[0].shape)
+# print('Output shape:', lstm_model(six_step_window.example[0]).shape)
+
+loss = tf.keras.losses.Huber()
+epochs = 50
+callback = EarlyStopping(patience = 5, restore_best_weights = True)
 
 history = compile_and_fit(lstm_model, six_step_window)
 
@@ -383,11 +407,23 @@ six_step_window.plot(lstm_model)
 # Include training and val loss graphs -------------
 # mae is making the lstm 'too smooth', where/why is the model too smooth/has large error in a predictable way
 
+def plot_loss(history, model_name):
+    plt.figure(figsize=(10, 6))
+    plt.plot(history.history['loss'], label='Training Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.title(f'{model_name} Training and Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss (Huber)')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+plot_loss(history, 'LSTM Model')
+
 cm = lstm_model.metrics[1]
 cm.metrics
 
-print(val_performance)
-
+val_performance
 
 x = np.arange(len(performance))
 width = 0.3
@@ -401,5 +437,3 @@ plt.bar(x + 0.17, test_mae, width, label='Test')
 plt.xticks(ticks=x, labels=performance.keys(),
            rotation=45)
 _ = plt.legend()
-
-
