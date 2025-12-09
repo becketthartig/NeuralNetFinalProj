@@ -118,6 +118,9 @@ In this project, we set out to determine whether Elon Musk’s tweeting behavior
 4. https://keras.io/api/layers/recurrent_layers/lstm/
 5. https://keras.io/api/layers/convolution_layers/
 6. https://keras.io/api/models/sequential/
+7. https://developers.google.com/machine-learning/crash-course/numerical-data/normalization
+8. https://scikit-learn.org/stable/modules/preprocessing.html
+9. https://scikit-learn.org/stable/api/sklearn.decomposition.html
 
 
 
