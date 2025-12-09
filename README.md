@@ -1,5 +1,5 @@
 # An Over-The-Top Analysis of Elon Musk’s Tweeting Habits
-## Adam VanWyk, Beckett Hartig
+### Adam VanWyk, Beckett Hartig
 
 ## Introduction
 Our project centered around predicting the frequency of Elon Musk’s tweets for use in trading that market on the prediction market platform, Polymarket. A prediction market acts similarly to any derivatives market. That is, you can freely buy and sell contracts whose price is derived based on something in the real world. A contract on Polymarket can be worth anywhere from 0 to 1 U.S. Dollar. Specifically, you can purchase a YES or NO contract for binary events around questions such as (seen in Figure One) “Will Elon Musk tweet between 380 and 399 times from December 2nd to December 9th, 2025?” If the answer to the question turns out to be YES, the value of your contract becomes $1. Contract prices are mechanically linked, i.e. if a YES contract is worth $0.60, a NO contract in the same market would be worth $0.40. That is because the value represents the percentage chance of the event occurring. For example, a YES contract worth $0.60 represents a 60% of the event happening because you should be indifferent whether you lose or win, as defined by the equation below:
@@ -12,39 +12,39 @@ We were interested in determining if we could predict how often Elon Musk would 
 
 ## Methodology & Data
 The dataset we used is publicly available on the website xtracker.io. The available CSV file contains every tweet Elon Musk has posted on X since April 18, 2024, including a tweet ID, the text content of the post, and importantly, second-granular timestamp. While the dataset was robust, we realized that just having the timestamp and text wasn’t enough. As such, we immediately began to determine what features could be derived from the text and timestamp content of the dataset. We used a mixture of the Python CSV library and the Pandas library to create a new CSV that summarized Musk’s activity for each day with the following features and definitions:
-Text Derived:
-Retweets Total
-Number of tweets that were retweets that day
-Easily determined by the presence of “RT” at the beginning of the tweet string
-Average Tweet Length
-Determined by counting the characters of each tweet string
-Time Derived
-Total Tweets
-The number of times Musk tweeted that day
-Tweet Ratio
-The percentage of tweets that were retweets
-Average Tweets Per Hour
-Total Tweets / 24
-Active Hours Count
-How many hours of the day (e.g., between 8:00 and 8:59) did Musk post a tweet?
-Mean Intertweet Gap
-How much time, on average, was Musk waiting before positing another tweet
-Standard Deviation of Intertweet Gap
-Minimum Intertweet Gap
-Maximum Intertweet Gap
-Burst Count
-How many times did Elon Musk wait less than 10 minutes before posting another tweet?
-Max Burst Length
-What is the maximum number of tweets Musk posted in a burst as defined above?
-Burstiness
-(std intertweet gap - mean intertweet gap)                                                     /   (std intertweet gap + mean intertweet gap)
-Tweet Entropy
-Shannon Entropy 
--(P(xi)ln(P(xi))
-Where P(xi) is the probability of a tweet occurring in hour i of the day
-7 Day Average of Total Tweets
-Calculated using a rolling 7-day window
-7 Day Variance of Total Tweets
+### Text Derived:
+1. Retweets Total
+   - Number of tweets that were retweets that day
+   - Easily determined by the presence of “RT” at the beginning of the tweet string
+2. Average Tweet Length
+   - Determined by counting the characters of each tweet string
+### Time Derived
+3. Total Tweets
+   - The number of times Musk tweeted that day
+4. Tweet Ratio
+   - The percentage of tweets that were retweets
+5. Average Tweets Per Hour
+   - Total Tweets / 24
+6. Active Hours Count
+   - How many hours of the day (e.g., between 8:00 and 8:59) did Musk post a tweet?
+7. Mean Intertweet Gap
+   - How much time, on average, was Musk waiting before positing another tweet
+8. Standard Deviation of Intertweet Gap
+9. Minimum Intertweet Gap
+10. Maximum Intertweet Gap
+11. Burst Count
+   - How many times did Elon Musk wait less than 10 minutes before posting another tweet?
+12. Max Burst Length
+   - What is the maximum number of tweets Musk posted in a burst as defined above?
+13. Burstiness
+   - (std intertweet gap - mean intertweet gap) / (std intertweet gap + mean intertweet gap)
+14. Tweet Entropy
+   - Shannon Entropy 
+   - -Σ(P(xi)ln(P(xi))
+   - Where P(xi) is the probability of a tweet occurring in hour i of the day
+15. 7 Day Average of Total Tweets
+   - Calculated using a rolling 7-day window
+16. 7 Day Variance of Total Tweets
 
 With this data in hand, calculated for every day from April 18, 2024, to the present, we were able to move on to the modeling portion of the task. Of course, our goal was to predict the total number of tweets for the next day given the past daily summaries in our data. As we theorized that Elon Musk’s behavior over a period of days was not random and could be used to predict the next day’s total, our original idea was to use an LSTM model over some number of day summaries to capture temporal patterns. This makes sense. As seen in Figure Two below, while there is a significant amount of noise in the data on the number of tweets each day, there are clear regimes of posting behavior that can be traced. We also tested a simple dense neural network, trained on the data from one day to predict the next day as a baseline, and a few other more complex networks, such as a CNN for time series.
 
