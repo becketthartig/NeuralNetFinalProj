@@ -74,32 +74,19 @@ In this model, we originally used a random train/test split of 80/20, but pivote
 
 Figure Seven: Sequential Predictions and Actual Tweet Totals
 For every run of our sequential model, we examine the Permutation Feature Importance of every feature to determine which features are most important in any given instance of the model. The PFI for the instance corresponding to Figure Seven can be seen below in Figure Eight, below. This Instance of the PFI calculation is a fair representation of the features that are most often considered important. 
-Feature
-PFI Calculation
-tweets_total
-5.858348
-mean_intertweet_gap
-2.949440
-time_of_last_tweet_cos    
 
-
-0.757110
-active_hours_count        
-
-
-0.734427
-std_intertweet_gap        
-0.709939
-night_tweets              
-0.616544
-retweets_total            
-0.562260
-burst_count               
-0.560508
-afternoon_tweets          
-0.531879
-morning_tweets            
-0.482988
+| Feature | PFI Calculation |
+| --- | --- |
+| tweets_total | 5.858348 |
+| mean_intertweet_gap | 2.949440 |
+| time_of_last_tweet_cos | 0.757110 |
+| active_hours_count | 0.734427 |
+| std_intertweet_gap | 0.709939 |
+| night_tweets | 0.616544 |
+| retweets_total | 0.562260 |
+| burst_count | 0.560508 |
+| afternoon_tweets | 0.531879 |
+| morning_tweets | 0.482988 |
 
 Figure Eight: Example Permutation Feature Importance 
 
